@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Чеканка по полированному алюминию — Normal Map + HDRI</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0c;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#fff}
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:crosshair}
+  .hud{position:fixed;top:20px;left:20px;z-index:10;pointer-events:none;max-width:520px}
+  .hud h1{font-size:clamp(22px,3.4vw,38px);line-height:1.05;font-weight:800;letter-spacing:-.02em;text-shadow:0 2px 24px rgba(0,0,0,.55)}
+  .hud h1 span{background:linear-gradient(90deg,#fff,#c9d6ff 45%,#fff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hud p{margin-top:10px;font-size:14px;line-height:1.5;color:rgba(255,255,255,.82);text-shadow:0 1px 12px rgba(0,0,0,.6)}
+  .badge{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:7px 11px;border-radius:999px;background:rgba(10,10,14,.42);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(10px);font-size:12px;letter-spacing:.02em}
+  .dot{width:8px;height:8px;border-radius:50%;background:#7CFFB2;box-shadow:0 0 12px #7CFFB2}
+  .panel{position:fixed;right:20px;top:20px;z-index:10;width:320px;max-width:calc(100vw - 40px);background:rgba(12,12,16,.58);border:1px solid rgba(255,255,255,.14);border-radius:20px;backdrop-filter:blur(16px) saturate(1.2);padding:16px 16px 14px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:rgba(255,255,255,.72);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+  .panel h2 button{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;border-radius:999px;padding:5px 9px;font-size:12px;cursor:pointer}
+  .panel h2 button:hover{background:rgba(255,255,255,.16)}
+  .row{margin:11px 0}
+  .row label{display:flex;justify-content:space-between;font-size:13px;color:rgba(255,255,255,.88);margin-bottom:6px}
+  .row label output{font-variant-numeric:tabular-nums;color:#c9d6ff}
+  input[type=range]{width:100%;accent-color:#8fb0ff;height:22px;cursor:pointer}
+  .toggles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  .toggles label{display:flex;align-items:center;gap:7px;font-size:12.5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);padding:8px 9px;border-radius:12px;cursor:pointer}
+  .toggles input{accent-color:#8fb0ff}
+  .thumbs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:13px}
+  .thumbs figure{border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:#111}
+  .thumbs img{width:100%;height:64px;object-fit:cover;display:block}
+  .thumbs figcaption{font-size:10.5px;text-align:center;padding:5px 2px;color:rgba(255,255,255,.72);background:rgba(0,0,0,.35)}
+  .hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:10;background:rgba(10,10,14,.5);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);padding:9px 14px;border-radius:999px;font-size:13px;color:rgba(255,255,255,.9);white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+  .status{position:fixed;left:20px;bottom:18px;z-index:10;font-size:12px;color:rgba(255,255,255,.75);background:rgba(10,10,14,.45);border:1px solid rgba(255,255,255,.12);padding:8px 11px;border-radius:12px;backdrop-filter:blur(10px)}
+  @media(max-width:760px){
+    .hud{right:20px}
+    .panel{top:auto;bottom:64px;right:12px;left:12px;width:auto;max-height:46vh;overflow:auto}
+    .hint{bottom:12px;font-size:12px;max-width:92vw;white-space:normal;text-align:center}
+    .status{display:none}
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div class="hud">
+  <h1>Чеканка по <span>полированному алюминию</span></h1>
+  <p>Ваша Normal Map применена к сгенерированной текстуре алюминия. Отражения берутся из HDRI-студии, а рельеф чеканки виден по бликам и теням на металле.</p>
+  <div class="badge"><span class="dot"></span><span id="loadStatus">Загрузка текстур…</span></div>
+</div>
+
+<aside class="panel" aria-label="Настройки материала">
+  <h2>Материал <button id="resetBtn" type="button">Сброс</button></h2>
+
+  <div class="row"><label>Сила нормалей <output id="o_normal">1.60</output></label><input id="normalScale" type="range" min="0" max="4" step="0.01" value="1.6"></div>
+  <div class="row"><label>Шероховатость <output id="o_rough">0.08</output></label><input id="roughness" type="range" min="0" max="0.6" step="0.01" value="0.08"></div>
+  <div class="row"><label>Металличность <output id="o_metal">1.00</output></label><input id="metalness" type="range" min="0" max="1" step="0.01" value="1"></div>
+  <div class="row"><label>Экспозиция <output id="o_exp">1.35</output></label><input id="exposure" type="range" min="0.2" max="3" step="0.01" value="1.35"></div>
+  <div class="row"><label>Влияние курсора на HDRI <output id="o_mouse">0.65</output></label><input id="mouseInfluence" type="range" min="0" max="1.5" step="0.01" value="0.65"></div>
+  <div class="row"><label>Сила света за курсором <output id="o_light">1.00</output></label><input id="lightIntensity" type="range" min="0" max="3" step="0.01" value="1"></div>
+  <div class="row"><label>Ручной поворот HDRI <output id="o_rot">0.60</output></label><input id="hdriRot" type="range" min="-3.14" max="3.14" step="0.01" value="0.6"></div>
+
+  <div class="toggles">
+    <label><input id="autoRotate" type="checkbox" checked> Авто-вращение</label>
+    <label><input id="flipY" type="checkbox"> Flip Y (DirectX)</label>
+  </div>
+
+  <div class="thumbs">
+    <figure><img id="thumbNormal" alt="Normal Map"><figcaption>Normal Map</figcaption></figure>
+    <figure><img id="thumbAlu" alt="Алюминий"><figcaption>Алюминий</figcaption></figure>
+    <figure><img id="thumbHdri" alt="HDRI"><figcaption>HDRI</figcaption></figure>
+  </div>
+</aside>
+
+<div class="hint">🖱️ Водите курсором — HDRI немного крутится, а свет меняет угол и бликует по чеканке</div>
+<div class="status">WebGL • PBR-отражения • Fresnel • блик за курсором</div>
+
+<script>
+const NORMAL_DATA="textures/normal.png";
+const HDRI_DATA="textures/hdri.jpg";
+const ALU_DATA="textures/aluminum.jpg";
+document.getElementById('thumbNormal').src=NORMAL_DATA;
+document.getElementById('thumbAlu').src=ALU_DATA;
+document.getElementById('thumbHdri').src=HDRI_DATA;
+
+const canvas=document.getElementById('gl');
+const statusEl=document.getElementById('loadStatus');
+const gl=canvas.getContext('webgl2',{antialias:false,alpha:false})||canvas.getContext('webgl',{antialias:false,alpha:false});
+if(!gl)throw new Error('WebGL not supported');
+
+const VS=`attribute vec2 a_pos;varying vec2 v_uv;void main(){v_uv=a_pos*0.5+0.5;gl_Position=vec4(a_pos,0.,1.);}`;
+const FS=`
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_normal;uniform sampler2D u_hdri;uniform sampler2D u_aluminum;
+uniform vec2 u_resolution;uniform vec2 u_mouse;uniform float u_time;
+uniform float u_normalScale;uniform float u_roughness;uniform float u_metalness;
+uniform float u_exposure;uniform float u_hdriRot;uniform float u_mouseInfluence;
+uniform float u_lightIntensity;uniform float u_flipY;
+vec2 coverUV(vec2 uv,vec2 res,vec2 texRes){float sa=res.x/res.y;float ta=texRes.x/texRes.y;vec2 s=vec2(1.);if(sa>ta)s.y=ta/sa;else s.x=sa/ta;return uv*s+(1.-s)*.5;}
+vec3 sampleHDRI(vec3 dir){float lon=atan(dir.x,dir.z);float lat=asin(clamp(dir.y,-1.,1.));vec2 uv=vec2(lon/6.28318530718+.5,.5-lat/3.14159265359);uv.x=fract(uv.x);uv.y=clamp(uv.y,.002,.998);vec3 c=texture2D(u_hdri,uv).rgb;return pow(max(c,vec3(0.)),vec3(2.2))*2.6+vec3(.055);}
+vec3 sampleHDRIBlur(vec3 dir,float r){vec3 col=sampleHDRI(dir)*.52;col+=sampleHDRI(normalize(dir+vec3(r*.35,r*.18,0.)))*.12;col+=sampleHDRI(normalize(dir+vec3(-r*.35,r*.22,0.)))*.12;col+=sampleHDRI(normalize(dir+vec3(r*.15,-r*.35,0.)))*.12;col+=sampleHDRI(normalize(dir+vec3(-r*.18,-r*.30,0.)))*.12;return col;}
+vec3 aces(vec3 x){return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.);}
+void main(){
+vec2 uv=v_uv;
+vec2 nUV=coverUV(uv,u_resolution,vec2(1800.,1350.));
+vec2 aUV=coverUV(uv,u_resolution,vec2(1024.,1024.));
+vec3 nTex=texture2D(u_normal,nUV).rgb*2.-1.;nTex.y*=u_flipY;
+vec3 N=normalize(vec3(nTex.x*u_normalScale,nTex.y*u_normalScale,nTex.z));
+vec3 V=vec3(0.,0.,1.);vec3 R=reflect(-V,N);
+float rotY=u_hdriRot+u_mouse.x*u_mouseInfluence*.85;
+float rotX=-.28+u_mouse.y*u_mouseInfluence*.38;
+vec3 Rr=R;float cy=cos(rotY),sy=sin(rotY);Rr.xz=mat2(cy,-sy,sy,cy)*Rr.xz;
+float cx=cos(rotX),sx=sin(rotX);Rr.yz=mat2(cx,-sx,sx,cx)*Rr.yz;Rr=normalize(Rr);
+vec3 alu=texture2D(u_aluminum,aUV).rgb;
+float aluLum=dot(alu,vec3(.299,.587,.114));
+vec3 baseColor=alu*vec3(1.03,1.01,.99);
+float roughness=clamp(u_roughness+(aluLum-.78)*.38,.02,1.);
+vec3 env=sampleHDRIBlur(Rr,roughness);
+vec3 F0=mix(vec3(.04),vec3(.91,.92,.94),u_metalness);
+float ndv=max(dot(N,V),0.);
+vec3 F=F0+(1.-F0)*pow(1.-ndv,5.);
+vec3 specIBL=env*F;
+vec3 diffuse=baseColor*(1.-u_metalness)*env*.35;
+vec3 ambient=baseColor*F*vec3(.30,.31,.33)*(.65+.35*aluLum);
+vec3 L=normalize(vec3(u_mouse.x*1.25,u_mouse.y*1.25,1.45));
+vec3 H=normalize(L+V);
+float ndh=max(dot(N,H),0.);float ndl=max(dot(N,L),0.);
+float shininess=mix(160.,10.,roughness);
+float spec=pow(ndh,shininess)*u_lightIntensity;
+vec3 directSpec=vec3(1.,.98,.94)*spec*F*2.4;
+vec3 directDiff=baseColor*(1.-u_metalness)*ndl*vec3(1.,.98,.94)*.45;
+vec3 color=specIBL+diffuse+ambient+directSpec+directDiff;
+float vig=1.-.18*pow(length(uv-.5),2.)*2.2;color*=vig;
+color*=u_exposure;color=aces(color);color=pow(color,vec3(1./2.2));
+gl_FragColor=vec4(color,1.);
+}`;
+
+function compile(t,s){const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh;}
+const prog=gl.createProgram();gl.attachShader(prog,compile(gl.VERTEX_SHADER,VS));gl.attachShader(prog,compile(gl.FRAGMENT_SHADER,FS));gl.linkProgram(prog);gl.useProgram(prog);
+const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+const loc=gl.getAttribLocation(prog,'a_pos');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+const U={};['u_normal','u_hdri','u_aluminum','u_resolution','u_mouse','u_time','u_normalScale','u_roughness','u_metalness','u_exposure','u_hdriRot','u_mouseInfluence','u_lightIntensity','u_flipY'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+function placeholder(r,g,b){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([r,g,b,255]));gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);return t;}
+const phN=placeholder(128,128,255),phH=placeholder(40,40,40),phA=placeholder(200,200,205);
+let texN=null,texH=null,texA=null,loaded=0;
+function tick(name){loaded++;statusEl.textContent=loaded===3?'Готово • все текстуры загружены':'Загружено текстур: '+loaded+' / 3 — '+name;}
+function load(data,flip,wrap,cb,name){const img=new Image();img.onload=()=>{const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,flip);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,wrap);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);cb(t);tick(name);};img.src=data;}
+load(NORMAL_DATA,true,gl.CLAMP_TO_EDGE,t=>texN=t,'Normal Map');
+load(HDRI_DATA,false,gl.REPEAT,t=>texH=t,'HDRI');
+load(ALU_DATA,true,gl.CLAMP_TO_EDGE,t=>texA=t,'Алюминий');
+
+const $=id=>document.getElementById(id);
+const params={normalScale:1.6,roughness:0.08,metalness:1,exposure:1.35,mouseInfluence:0.65,lightIntensity:1,hdriRot:0.6,flipY:1,autoRotate:true};
+function bind(id,key,outId){const el=$(id);el.addEventListener('input',()=>{const v=parseFloat(el.value);params[key]=v;if(outId)$(outId).textContent=v.toFixed(2);});}
+bind('normalScale','normalScale','o_normal');bind('roughness','roughness','o_rough');bind('metalness','metalness','o_metal');
+bind('exposure','exposure','o_exp');bind('mouseInfluence','mouseInfluence','o_mouse');bind('lightIntensity','lightIntensity','o_light');bind('hdriRot','hdriRot','o_rot');
+$('flipY').addEventListener('change',e=>params.flipY=e.target.checked?-1:1);
+$('autoRotate').addEventListener('change',e=>params.autoRotate=e.target.checked);
+$('resetBtn').addEventListener('click',()=>{
+  Object.assign(params,{normalScale:1.6,roughness:0.08,metalness:1,exposure:1.35,mouseInfluence:0.65,lightIntensity:1,hdriRot:0.6,flipY:1,autoRotate:true});
+  $('normalScale').value=1.6;$('roughness').value=0.08;$('metalness').value=1;$('exposure').value=1.35;$('mouseInfluence').value=0.65;$('lightIntensity').value=1;$('hdriRot').value=0.6;
+  $('o_normal').textContent='1.60';$('o_rough').textContent='0.08';$('o_metal').textContent='1.00';$('o_exp').textContent='1.35';$('o_mouse').textContent='0.65';$('o_light').textContent='1.00';$('o_rot').textContent='0.60';
+  $('flipY').checked=false;$('autoRotate').checked=true;
+});
+
+let tm={x:0,y:0},m={x:0,y:0},last=performance.now(),ang=0;
+addEventListener('pointermove',e=>{tm.x=(e.clientX/innerWidth)*2-1;tm.y=-((e.clientY/innerHeight)*2-1);last=performance.now();},{passive:true});
+addEventListener('pointerdown',e=>{tm.x=(e.clientX/innerWidth)*2-1;tm.y=-((e.clientY/innerHeight)*2-1);last=performance.now();},{passive:true});
+function resize(){const d=Math.min(devicePixelRatio||1,2);canvas.width=Math.floor(innerWidth*d);canvas.height=Math.floor(innerHeight*d);gl.viewport(0,0,canvas.width,canvas.height);}
+addEventListener('resize',resize);resize();
+let prev=performance.now();
+function frame(now){const dt=Math.min((now-prev)/1000,.05);prev=now;
+if(params.autoRotate&&now-last>2500){ang+=dt*.12;tm.x=Math.sin(ang)*.55;tm.y=Math.cos(ang*.7)*.35;}
+m.x+=(tm.x-m.x)*.07;m.y+=(tm.y-m.y)*.07;
+gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texN||phN);gl.uniform1i(U.u_normal,0);
+gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,texH||phH);gl.uniform1i(U.u_hdri,1);
+gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,texA||phA);gl.uniform1i(U.u_aluminum,2);
+gl.uniform2f(U.u_resolution,canvas.width,canvas.height);gl.uniform2f(U.u_mouse,m.x,m.y);gl.uniform1f(U.u_time,now*.001);
+gl.uniform1f(U.u_normalScale,params.normalScale);gl.uniform1f(U.u_roughness,params.roughness);gl.uniform1f(U.u_metalness,params.metalness);
+gl.uniform1f(U.u_exposure,params.exposure);gl.uniform1f(U.u_hdriRot,params.hdriRot);gl.uniform1f(U.u_mouseInfluence,params.mouseInfluence);
+gl.uniform1f(U.u_lightIntensity,params.lightIntensity);gl.uniform1f(U.u_flipY,params.flipY);
+gl.drawArrays(gl.TRIANGLE_STRIP,0,4);requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
